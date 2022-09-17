@@ -133,7 +133,7 @@ class GoogleDriveHelper:
             res = re.search(regex, link)
             if res is None:
                 raise IndexError("Drive ID not found")
-            return res.group(3)
+            return res[3]
         parsed = urlparse(link)
         return parse_qs(parsed.query)['id'][0]
 
@@ -330,11 +330,12 @@ class GoogleDriveHelper:
             'parents': [dest_id]
         }
         try:
-            res = self.__service.files().copy(
-                      supportsAllDrives=True,
-                      fileId=file_id,
-                      body=body).execute()
-            return res
+            return (
+                self.__service.files()
+                .copy(supportsAllDrives=True, fileId=file_id, body=body)
+                .execute()
+            )
+
         except HttpError as err:
             if err.resp.get('content-type', '').startswith('application/json'):
                 reason = json.loads(err.content).get('error').get('errors')[0].get('reason')
@@ -396,7 +397,7 @@ class GoogleDriveHelper:
                 self.__cloneFolder(meta.get('name'), meta.get('name'), meta.get('id'), dir_id)
                 durl = self.__G_DRIVE_DIR_BASE_DOWNLOAD_URL.format(dir_id)
                 if self.__is_cancelled:
-                    LOGGER.info(f"Deleting cloned data from Drive")
+                    LOGGER.info("Deleting cloned data from Drive")
                     self.deleteFile(durl)
                     return "The clone task has been cancelled"
                 msg += f'<b>Name:</b> <code>{name}</code>'
@@ -516,9 +517,7 @@ class GoogleDriveHelper:
                          body=file_metadata,
                          media_body=media_body)
         response = None
-        while response is None:
-            if self.__is_cancelled:
-                break
+        while response is None and not self.__is_cancelled:
             try:
                 self.__status, response = drive_file.next_chunk()
             except HttpError as err:
@@ -746,9 +745,8 @@ class GoogleDriveHelper:
         if exception is not None:
             exception = str(exception).replace('>', '').replace('<', '')
             LOGGER.error(exception)
-        else: 
-            if response['files']:
-                self.response[request_id] = response
+        elif response['files']:
+            self.response[request_id] = response
 
     def __drive_query(self, DRIVE_IDS, search_type, file_name):
         batch = self.__service.new_batch_http_request(self.__receive_callback)
@@ -787,10 +785,10 @@ class GoogleDriveHelper:
         search_type = None
         if re.search("^-d ", file_name, re.IGNORECASE):
             search_type = '-d'
-            file_name = file_name[3: len(file_name)]
+            file_name = file_name[3:]
         elif re.search("^-f ", file_name, re.IGNORECASE):
             search_type = '-f'
-            file_name = file_name[3: len(file_name)]
+            file_name = file_name[3:]
         msg = ''
         acc_no = -1
         page_per_acc = 2
@@ -812,19 +810,15 @@ class GoogleDriveHelper:
             for file in self.response[files]["files"]:
                 if file.get('mimeType') == self.__G_DRIVE_DIR_MIME_TYPE:
                     msg += f"🗂️<code>{file.get('name')}</code> <b>(folder)</b><br>" \
-                           f"<b><a href='https://drive.google.com/drive/folders/{file.get('id')}'>Drive Link</a></b>"
-                    if INDEX_URLS[index] is not None:
-                        url_path = requests.utils.quote(f"{file.get('name')}")
-                        url = f"{INDEX_URLS[index]}search?q={url_path}"
-                        msg += f"<b> | <a href='{url}'>Index Link</a></b>"
+                               f"<b><a href='https://drive.google.com/drive/folders/{file.get('id')}'>Drive Link</a></b>"
                 else:
                     msg += f"📄<code>{file.get('name')}</code> <b>({get_readable_file_size(int(file.get('size', 0)))})" \
-                           f"</b><br><b><a href='https://drive.google.com/uc?id={file.get('id')}" \
-                           f"&export=download'>Drive Link</a></b>"
-                    if INDEX_URLS[index] is not None:
-                        url_path = requests.utils.quote(f"{file.get('name')}")
-                        url = f"{INDEX_URLS[index]}search?q={url_path}"
-                        msg += f"<b> | <a href='{url}'>Index Link</a></b>"
+                               f"</b><br><b><a href='https://drive.google.com/uc?id={file.get('id')}" \
+                               f"&export=download'>Drive Link</a></b>"
+                if INDEX_URLS[index] is not None:
+                    url_path = requests.utils.quote(f"{file.get('name')}")
+                    url = f"{INDEX_URLS[index]}search?q={url_path}"
+                    msg += f"<b> | <a href='{url}'>Index Link</a></b>"
                 msg += '<br><br>'
                 response_count += 1
                 if response_count % TELEGRAPH_LIMIT == 0:
@@ -844,7 +838,7 @@ class GoogleDriveHelper:
             if i != 0:
                 # Add previous page link
                 self.telegraph_content[i] += f'<b><a href="https://graph.org/{self.telegraph_path[i-1]}">Previous</a>' \
-                                             f' | Page {i+1}/{total_pages}</b>'
+                                                 f' | Page {i+1}/{total_pages}</b>'
             else:
                 self.telegraph_content[i] += f'<b>Page {i+1}/{total_pages}</b>'
 
@@ -862,7 +856,7 @@ class GoogleDriveHelper:
                     self.telegraph_path[i-1])
 
         msg = f"<b>Found {response_count} results matching '{file_name}' in {len(DRIVE_IDS)} Drives</b> " \
-              f"<b>(Time taken {round(time.time() - start_time, 2)}s)</b>"
+                  f"<b>(Time taken {round(time.time() - start_time, 2)}s)</b>"
         button = ButtonMaker()
         button.build_button("VIEW RESULTS 🗂️", f"https://graph.org/{self.telegraph_path[0]}")
         return msg, button.build_menu(1)

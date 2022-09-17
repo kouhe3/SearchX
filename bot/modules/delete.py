@@ -9,11 +9,10 @@ from bot.helper.telegram_helper.filters import CustomFilters
 
 @new_thread
 def deleteNode(update, context):
-    reply_to = update.message.reply_to_message
     link = ''
     if len(context.args) == 1:
         link = context.args[0]
-    if reply_to:
+    if reply_to := update.message.reply_to_message:
         link = reply_to.text.split(maxsplit=1)[0].strip()
     if is_gdrive_link(link):
         msg = sendMessage(f"<b>Deleting:</b> <code>{link}</code>", context.bot, update.message)
